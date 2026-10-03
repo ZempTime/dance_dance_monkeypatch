@@ -1,0 +1,53 @@
+---
+display: native
+testability: interactive
+----------- app code
+load "/Users/chris/code/shoes/dance_dance_monkeypatch/dance_dance_monkeypatch.rb"
+----------- test code
+require "json"
+app = Shoes.APPS.first
+get = ->(name) { app.instance_variable_get(name) }
+bubble = -> { get.(:@bubble).instance_variable_get(:@text).text }
+
+assert_equal :title, get.(:@screen)
+assert_equal %w[M O N K E Y P A T C H], get.(:@letters).map { |_, front, _| front.text }
+assert_includes paras.map(&:text), "Chunky Bacon"
+assert_equal [0, 1], [get.(:@song_index), get.(:@level_index)], "it starts on the first song, on chunky"
+assert_includes FOX_LINES[:title], bubble.(), "the foxes say hello"
+
+3.times { press_key :right }
+assert_equal 0, get.(:@song_index), "three songs, and right wraps around"
+press_key :left
+assert_equal 2, get.(:@song_index)
+press_key :up
+assert_equal 2, get.(:@level_index)
+assert_includes paras.map(&:text), "every note. jumps. nil mines. no mercy."
+press_key :up
+assert_equal 2, get.(:@level_index), "UNHINGED is as far as it goes"
+3.times { press_key :down }
+assert_equal 0, get.(:@level_index), "and mild is as gentle"
+
+click_on "method_missing"
+assert_equal 1, get.(:@song_index), "clicking a card picks it"
+assert_equal :title, get.(:@screen), "without starting it"
+
+press_key "m"
+assert get.(:@jukebox).muted, "M mutes the music"
+assert_equal true, JSON.parse(File.read(SAVE_FILE))["muted"], "and remembers it"
+assert_match(/music off/, para("@status").text)
+press_key "m"
+refute get.(:@jukebox).muted
+press_key "v"
+assert get.(:@voices).quiet, "V hushes the foxes"
+press_key "v"
+
+%w[w h y].each { |key| press_key key }
+assert_includes FOX_LINES[:why], bubble.(), "typing why gets an answer"
+
+press_key "c"
+assert_equal :calibrate, get.(:@screen), "C opens the timing tuner"
+press_key :escape
+assert_equal :title, get.(:@screen)
+
+r, g, b, = pixel_at(480, 2)
+assert_operator r + g + b, :<, 120, "a dark night sky at the top"

@@ -1,0 +1,86 @@
+---
+display: native
+testability: interactive
+timeout: 120
+----------- app code
+load "/Users/chris/code/shoes/dance_dance_monkeypatch/dance_dance_monkeypatch.rb"
+----------- test code
+require "json"
+app = Shoes.APPS.first
+get = ->(name) { app.instance_variable_get(name) }
+$now = 1000.0
+app.instance_variable_set(:@clock, -> { $now })
+tick = -> { $now += 1 / 60.0; advance(1 / 60.0) }
+keys = [:left, :down, :up, :right]
+song_at = ->(seconds) { $now = get.(:@t0) + seconds }
+
+press_key "\n"
+assert_equal :loading, get.(:@screen), "the first time, the song is written out first"
+400.times { break if get.(:@screen) == :play; tick.() }
+assert_equal :play, get.(:@screen), "then it plays"
+wav = get.(:@wav)
+header = File.binread(wav, 44)
+assert_equal ["RIFF", "WAVE", 22_050], [header[0, 4], header[8, 4], header[24, 4].unpack1("V")]
+samples = File.binread(wav)[44..].unpack("s<*")
+assert_in_delta 67.1, samples.size / 22_050.0, 0.2, "a minute of chunky bacon"
+assert_operator samples.map(&:abs).max, :<=, (0.3 * 32_767).ceil, "never louder than 0.3"
+trap = ENV.fetch("SPEC_TRAP_FILE")
+wait_until { File.exist?(trap) && File.read(trap).include?("afplay #{wav}") }
+
+notes = get.(:@notes)
+bacon = notes.find { |n| n.kind == :bacon }
+taps = notes.select { |n| n.kind == :tap && n.time > bacon.time }
+counts = -> { get.(:@counts) }
+
+song_at.(0.5)
+tick.()
+press_key :left
+assert_includes get.(:@pops).map { |p| p[:text].text }, "no method", "a press with nothing there is a ghost"
+assert_equal [0, 0, 0, 0], counts.(), "which is not a miss"
+
+song_at.(bacon.time - 0.4)
+tick.()
+song_at.(bacon.time + 0.01)
+press_key " "
+assert_equal [1, 0, 0, 0], counts.(), "space on the bacon, 10 ms late: CHUNKY"
+
+first = taps[0]
+song_at.(first.time - 0.3)
+tick.()
+song_at.(first.time + 0.07)
+press_key keys[first.lane]
+assert_equal [1, 1, 0, 0], counts.(), "70 ms late: CRISPY"
+assert_equal 2, get.(:@combo)
+assert_operator get.(:@score), :>, 0
+
+second = taps[1]
+song_at.(second.time - 0.3)
+tick.()
+sanity = get.(:@sanity)
+song_at.(second.time + 0.2)
+tick.()
+assert_equal 1, counts.()[3], "left alone past the window, it's a miss"
+assert_equal 0, get.(:@combo), "which ends the combo"
+assert_operator get.(:@sanity), :<, sanity, "and costs sanity"
+
+press_key :escape
+assert get.(:@paused), "escape pauses"
+paused_at = get.(:@paused_at)
+$now += 30
+tick.()
+press_key "\n"
+refute get.(:@paused)
+assert_in_delta paused_at - 2 / get.(:@bps), $now - get.(:@t0), 0.001, "it picks up two beats before where it stopped"
+
+offset = get.(:@save)["offset"]
+press_key "]"
+assert_in_delta offset + 0.005, JSON.parse(File.read(SAVE_FILE))["offset"], 0.0001, "] nudges the timing later"
+
+app.send(:finish_play)
+assert_equal :results, get.(:@screen)
+best = JSON.parse(File.read(SAVE_FILE))["best"]["chunky_bacon/chunky"]
+assert_operator best["score"], :>, 0, "a real play is a best score"
+assert_includes paras.map(&:text), "ENTER  again     ESC  songs"
+press_key :escape
+assert_equal :title, get.(:@screen)
+assert_match(/best: /, paras.map(&:text).grep(/best:/).first.to_s, "the card shows it")

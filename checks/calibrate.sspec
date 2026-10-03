@@ -1,0 +1,29 @@
+---
+display: native
+testability: interactive
+----------- app code
+load "/Users/chris/code/shoes/dance_dance_monkeypatch/dance_dance_monkeypatch.rb"
+----------- test code
+require "json"
+app = Shoes.APPS.first
+get = ->(name) { app.instance_variable_get(name) }
+$now = 1000.0
+app.instance_variable_set(:@clock, -> { $now })
+spacing = 60.0 / CLICK_BPM
+
+press_key "c"
+assert_equal :calibrate, get.(:@screen)
+clicks = get.(:@click_wav)
+assert_equal 22_050, File.binread(clicks, 44)[24, 4].unpack1("V"), "a click track, written once"
+t0 = get.(:@t0)
+[0.03, 0.04, 0.02, 0.03, 0.05, 0.03, 0.01, 0.03].each_with_index do |late, i|
+  $now = t0 + (i + 2) * spacing + late
+  press_key " "
+end
+assert_equal 8, get.(:@taps).size
+assert_in_delta 0.12, get.(:@new_offset), 0.0001, "the middle tap was 30 ms late, so 90 ms becomes 120"
+assert_match(/measured 120 ms from 8 taps/, para("@cal_text").text)
+press_key "\n"
+assert_equal :title, get.(:@screen)
+assert_in_delta 0.12, JSON.parse(File.read(SAVE_FILE))["offset"], 0.0001, "ENTER keeps it"
+assert_match(/timing 120 ms/, para("@status").text)

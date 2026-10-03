@@ -1,0 +1,10 @@
+# packaged app and dmg: rebuild with `scarpe package`
+dist/
+
+# screenshots from peek while developing
+shots/
+
+# the icon before its corners are cut; icon/icon.png is the one packaging uses
+icon/square.png
+
+.DS_Store

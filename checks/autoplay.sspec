@@ -1,0 +1,36 @@
+---
+display: native
+testability: interactive
+timeout: 180
+----------- app code
+load "/Users/chris/code/shoes/dance_dance_monkeypatch/dance_dance_monkeypatch.rb"
+----------- test code
+require "json"
+app = Shoes.APPS.first
+get = ->(name) { app.instance_variable_get(name) }
+$now = 1000.0
+app.instance_variable_set(:@clock, -> { $now })
+
+press_key "a"
+400.times { break if get.(:@screen) == :play; $now += 1 / 60.0; advance(1 / 60.0) }
+assert_equal :play, get.(:@screen)
+assert get.(:@auto), "A lets the foxes play"
+seen = []
+3000.times do
+  break if get.(:@screen) == :results
+
+  $now += 1 / 20.0
+  advance(1 / 60.0)
+  seen << get.(:@mode) if get.(:@screen) == :play
+end
+assert_equal %i[highway drunk radial reverse spiral tunnel], seen.uniq, "every section patched the field in turn"
+assert_equal :results, get.(:@screen)
+result = get.(:@result)
+assert result[:full], "the foxes never miss"
+assert_equal "CHUNKY BACON", result[:grade]
+assert_includes paras.map(&:text), "FULL COMBO"
+assert_empty JSON.parse(File.read(SAVE_FILE))["best"], "the foxes' scores don't count"
+trap = ENV.fetch("SPEC_TRAP_FILE")
+wait_until { File.read(trap).include?("say -v Cellos") }
+pass "a full combo gets sung about"
+

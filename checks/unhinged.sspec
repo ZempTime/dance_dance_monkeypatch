@@ -1,0 +1,43 @@
+---
+display: native
+testability: interactive
+timeout: 120
+----------- app code
+load "/Users/chris/code/shoes/dance_dance_monkeypatch/dance_dance_monkeypatch.rb"
+----------- test code
+require "json"
+app = Shoes.APPS.first
+get = ->(name) { app.instance_variable_get(name) }
+$now = 1000.0
+app.instance_variable_set(:@clock, -> { $now })
+tick = -> { $now += 1 / 60.0; advance(1 / 60.0) }
+keys = [:left, :down, :up, :right]
+
+2.times { press_key :right }
+press_key :up
+assert_equal [2, 2], [get.(:@song_index), get.(:@level_index)]
+press_key "\n"
+400.times { break if get.(:@screen) == :play; tick.() }
+assert_equal :play, get.(:@screen)
+
+notes = get.(:@notes)
+assert_operator notes.count { |n| n.kind == :mine }, :>=, 10, "UNHINGED lays nil mines"
+by_step = notes.select { |n| n.kind == :tap }.group_by(&:step)
+assert by_step.values.any? { |group| group.size == 2 }, "and jumps: two arrows at once"
+
+mine = notes.find { |n| n.kind == :mine }
+app.instance_variable_set(:@sanity, 10_000.0) # skipping ahead misses every note on the way
+$now = get.(:@t0) + mine.time - 0.3
+tick.()
+sanity = get.(:@sanity)
+$now = get.(:@t0) + mine.time
+press_key keys[mine.lane]
+assert_equal 1, get.(:@mines_hit), "stepping on a nil"
+assert_equal sanity - 10, get.(:@sanity), "costs ten sanity"
+
+app.instance_variable_set(:@sanity, 30.0)
+$now = get.(:@t0) + 45
+200.times { tick.(); break if get.(:@screen) == :results }
+assert_equal :results, get.(:@screen), "doing nothing for long enough gets you garbage collected"
+assert_includes paras.map(&:text), "GC'd"
+assert_nil JSON.parse(File.read(SAVE_FILE))["best"]["eval_chaos/unhinged"], "and no best score"
